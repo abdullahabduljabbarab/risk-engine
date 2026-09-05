@@ -8,10 +8,11 @@ Build and deploy a cloud-hosted risk engine that gives the payment orchestrator 
 
 - A synchronous decision endpoint, `POST /risk/evaluate`, returning allow, review or block with a score and reasons
 - A deterministic weighted rules engine over payment and behavioural signals
-- Configurable weights, thresholds and band boundaries, versioned so decisions stay replayable
-- An append-only decision log recording the input snapshot, rule version, reasons, score and decision
-- Per-account behavioural state built asynchronously from consumed events (velocity, destinations, failures, amount history)
-- The fail-safe contract: uncertainty holds a payment for review, never allows or auto-rejects
+- Configurable weights, thresholds and band boundaries, versioned with a config hash so decisions stay replayable
+- An append-only decision log recording the feature snapshot, rule version, config hash, reasons, score and decision
+- Idempotent evaluation on a caller-supplied evaluation_id, so a retry returns the original decision
+- Per-account behavioural state derived from persisted observations, consumed via a Pub/Sub push endpoint
+- The fail-safe contract: uncertainty holds a payment for review, never allows or auto-rejects, including a state-freshness floor
 - Independence of the sync decision path from the async state feed
 - A transactional outbox publishing risk events to Pub/Sub with the ABS envelope
 - PostgreSQL (local and production), Alembic migrations
@@ -25,7 +26,7 @@ Build and deploy a cloud-hosted risk engine that gives the payment orchestrator 
 
 - A machine-learning model (deliberately: deterministic rules are the engineering point)
 - The orchestrator-side integration change to call the engine (a separate, sequenced step in the orchestrator repo)
-- A human review UI or workflow (the orchestrator's RISK_REVIEW state and review endpoint own that)
+- Review resolution: the resolving of a held payment is owned outside this service and is not part of this MVP
 - Real personal or financial data
 - Authentication on the engine's own endpoints
 

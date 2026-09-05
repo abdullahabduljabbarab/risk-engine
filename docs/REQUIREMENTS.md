@@ -10,24 +10,28 @@ The risk engine owns a subset of the ABS system requirements, defined in [SYSTEM
 | REQ-F-002 | The system shall compute a 0 to 100 score as the sum of the weights of the rules a payment fires, capped at 100. | |
 | REQ-F-003 | The system shall map the score to a decision using configurable band boundaries (allow, review, block). | |
 | REQ-F-004 | The system shall attach to every decision the rules that fired and their weights, so the decision is explainable. | ABS-REQ-015 |
-| REQ-F-005 | The system shall record for every decision the input snapshot, the rule version, the triggered rules and weights, the score, the decision, the correlation_id and the timestamp. | ABS-REQ-015 |
+| REQ-F-005 | The system shall record for every decision the feature snapshot, the rule version, a hash of the configuration, the triggered rules and weights, the score, the decision, the correlation_id and the timestamp. | ABS-REQ-015 |
 | REQ-F-006 | The system shall echo the caller's correlation_id on the decision so a request is traceable across services. | ABS-REQ-009 |
-| REQ-F-007 | The system shall maintain per-account behavioural state (velocity, destinations seen, recent failures, amount history, first-seen time) from consumed events. | |
+| REQ-F-007 | The system shall maintain per-account behavioural state (velocity, destinations seen, recent failures, amount average, first-observed time) derived from consumed events. | |
 | REQ-F-008 | The system shall compute a decision from the behavioural state and the payment at evaluate time, without contacting any other service. | ABS-REQ-016 |
 | REQ-F-009 | The system shall emit a domain event for every decision through a transactional outbox. | ABS-REQ-007 |
 | REQ-F-010 | The system shall expose a health endpoint that probes the database. | |
+| REQ-F-011 | The system shall receive events via a Pub/Sub push subscription at `POST /events/pubsub`, validate the ABS envelope, deduplicate on event_id, and record the observation and update state in one transaction, returning 2xx on success and non-2xx to trigger retry. | ABS-REQ-008 |
+| REQ-F-012 | The system shall make evaluation idempotent on a caller-supplied evaluation_id: the same id returns the original decision and emits no second event; the same id with a different request body is a conflict. | ABS-REQ-002 (shape) |
+| REQ-F-013 | The system shall persist every consumed observation (event_id, type, occurred_at, account, payment, correlation, payload) so behavioural state is rebuildable and out-of-order events are ordered by occurred_at. | ABS-REQ-008 |
 
 ## Non-Functional
 
 | ID | Requirement | ABS |
 |----|-------------|-----|
 | REQ-NF-001 | A decision shall be deterministic and replayable: the same input snapshot and rule version always produce the same score and decision. | ABS-REQ-014 |
-| REQ-NF-002 | Uncertainty shall never permit money to move: the engine never returns a decision that lets an unscored payment proceed, and the caller holds a payment for review when the engine is unavailable. | ABS-REQ-013 |
-| REQ-NF-003 | The synchronous decision path shall not depend on the asynchronous state feed being healthy or current; a decision is returned even if event consumption has stopped. | ABS-REQ-016 |
+| REQ-NF-002 | Uncertainty shall never permit money to move: the caller holds a payment for review when the engine is unavailable, and the engine floors a decision at review when the behavioural state is older than the configured maximum acceptable age. | ABS-REQ-013 |
+| REQ-NF-003 | The synchronous decision path shall not depend on the asynchronous state feed being healthy or current; a decision is returned even if event consumption has stopped, and staleness is handled by the freshness floor rather than by blocking. | ABS-REQ-016 |
 | REQ-NF-004 | The engine shall not read or write financial state; it never moves money or records a ledger transaction. | ABS-REQ-001 |
 | REQ-NF-005 | Events shall be delivered at least once, captured atomically with the decision, and deduplicated by consumers on event_id. | ABS-REQ-007, 008 |
 | REQ-NF-006 | Rule weights and thresholds shall be configuration, and a change to them is a new rule version so past decisions remain replayable. | ABS-REQ-014 |
 | REQ-NF-007 | Monetary values shall use Decimal (Python) and Numeric (PostgreSQL). No floats. | |
 | REQ-NF-008 | Credentials shall be stored in Secret Manager and injected at runtime, never in source control. | |
 | REQ-NF-009 | The CI pipeline shall lint, run the full test suite against PostgreSQL, and validate the Terraform before deploy. | |
-| REQ-NF-010 | Schema changes shall be managed through versioned Alembic migrations. | |
+| REQ-NF-010 | Schema changes shall be managed through versioned Alembic migrations, and CI shall run the integration suite against the Alembic-migrated schema, not only against ORM metadata. | |
+| REQ-NF-011 | A used rule version's configuration is immutable: every decision records a hash of the full configuration (weights, thresholds, bands, watch-list version), and a configuration change creates a new rule version rather than mutating an existing one. | ABS-REQ-014, 015 |
