@@ -20,7 +20,7 @@ This threat model covers the risk-engine service: a payment risk decisioning ser
 
 | Threat | Mitigation | Test |
 |--------|------------|------|
-| Attacker forges payment events to skew an account's behavioural state | The state only informs a score and never moves money, and a malformed message is rejected. OIDC verification on the push endpoint is a noted gap. | `test_push_endpoint_rejects_malformed` |
+| Attacker forges payment events to skew an account's behavioural state | The push endpoint requires a Google OIDC token minted for the dedicated push service account, so a delivery without a valid token is rejected before any event is applied. The state also only informs a score and never moves money. | `test_push_endpoint_requires_auth_when_configured`, `test_push_endpoint_rejects_malformed` |
 | Attacker replays events to inflate velocity or history | Consumed events are deduplicated on `event_id`, so a redelivery does not double-count. | `test_duplicate_event_is_a_noop`, `test_observation_dedup_on_event_id` |
 
 ### T: Tampering
@@ -65,7 +65,6 @@ This threat model covers the risk-engine service: a payment risk decisioning ser
 
 | Gap | Risk | Priority |
 |-----|------|----------|
-| OIDC verification on the push endpoint | Medium: a forged event could skew behavioural state, bounded because state never moves money | Would add in production |
 | Authentication on the evaluate endpoint | Low to medium: any caller can request a decision, which has no financial effect | Would add in production |
 | Authoritative account age via `account.created` | Low: SHORT_HISTORY measures observed history, not true account age | Would add with the ABS contract |
 | Rate limiting | Low: API abuse | Would add via Cloud Armor or middleware |

@@ -96,3 +96,13 @@ def test_push_endpoint_rejects_malformed(client):
     body = {"message": {"data": "not-base64-json!!", "messageId": "1"}}
     resp = client.post("/events/pubsub", json=body)
     assert resp.status_code == 400
+
+
+def test_push_endpoint_requires_auth_when_configured(client, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "PUBSUB_PUSH_SA", "risk-pubsub-push@x.iam.gserviceaccount.com")
+    env = _envelope()
+    data = base64.b64encode(json.dumps(env).encode()).decode()
+    resp = client.post("/events/pubsub", json={"message": {"data": data, "messageId": "1"}})
+    assert resp.status_code == 401  # no push token attached

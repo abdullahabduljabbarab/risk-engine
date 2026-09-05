@@ -39,7 +39,7 @@ FastAPI and Pydantic handle validation, routing and the OpenAPI spec. SQLAlchemy
 
 | Metric | Value |
 |--------|-------|
-| Test count | 57 |
+| Test count | 58 |
 | Alembic migrations | 1 (decisions, observations, account state, outbox) |
 | API endpoints | 6 |
 | Rules | 10 weighted signals, including the state-freshness floor |
@@ -90,4 +90,4 @@ The full requirement-to-test mapping is in [VV_PLAN.md](VV_PLAN.md). The load te
 
 **A derived state cache over querying observations each time.** The synchronous evaluate reads a per-account cache rather than aggregating observations at request time, keeping the decision path fast; the cache is always rebuildable from the observations if it is ever lost.
 
-**Public endpoints for a portfolio.** The service is public and the push endpoint unauthenticated, matching the orchestrator's posture. A production system would require an OIDC token on the push and authenticate the evaluate caller, which is noted in the threat model rather than built.
+**Authenticated push, public reads.** The consumer endpoint is protected because it mutates the state decisions read: the push subscription attaches a Google OIDC token minted for a dedicated service account, and the endpoint verifies it before applying an event. The read and decision endpoints stay public by scope decision, safe because the engine never moves money. Cloud Run IAM is per-service rather than per-path, so this mixed posture is enforced in the application, not the platform.

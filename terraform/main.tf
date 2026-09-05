@@ -115,6 +115,11 @@ resource "google_cloud_run_v2_service" "risk_engine" {
         value = google_pubsub_topic.risk_events.id
       }
 
+      env {
+        name  = "PUBSUB_PUSH_SA"
+        value = google_service_account.pubsub_push.email
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -150,6 +155,21 @@ resource "google_pubsub_topic" "dead_letter" {
   name = "risk-events-deadletter"
 }
 
+# A dedicated identity for the push subscription. Pub/Sub mints an OIDC token as
+# this account and attaches it to each push, and the consumer endpoint verifies
+# it, so only authenticated Pub/Sub deliveries can feed behavioural state.
+resource "google_service_account" "pubsub_push" {
+  account_id   = "risk-pubsub-push"
+  display_name = "Risk Engine Pub/Sub Push"
+}
+
+# Pub/Sub's service agent must be allowed to mint tokens as the push identity.
+resource "google_service_account_iam_member" "pubsub_token_creator" {
+  service_account_id = google_service_account.pubsub_push.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
 # A push subscription on the orchestrator's payment-events topic, delivering to
 # the risk engine's consumer endpoint. This is the asynchronous state path: the
 # engine builds behavioural state from these events, independently of the
@@ -160,6 +180,10 @@ resource "google_pubsub_subscription" "payment_events_to_risk" {
 
   push_config {
     push_endpoint = "${google_cloud_run_v2_service.risk_engine.uri}/events/pubsub"
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_push.email
+    }
   }
 
   ack_deadline_seconds = 20

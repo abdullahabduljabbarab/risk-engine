@@ -26,12 +26,11 @@ A portfolio demonstration of payment risk decisioning and cloud engineering. It 
 
 ## Authentication
 
-The engine's endpoints are unauthenticated, a deliberate scope decision for a portfolio, matching the ledger and orchestrator. The Pub/Sub push subscription delivers unauthenticated to the consumer endpoint, and the evaluate endpoint is open. Because the engine never moves money and its decision is advisory (an unreachable or wrong-holding engine causes the orchestrator to hold a payment, never to move it), the effect of an unauthenticated caller is bounded.
+The consumer endpoint is authenticated; the read and decision endpoints are open by scope decision. `POST /events/pubsub` changes the behavioural state that decisions read, so it is protected: the push subscription attaches a Google OIDC token minted for a dedicated push service account, and the endpoint verifies that token and the account it was issued to before applying an event, so an anonymous caller cannot post forged events to skew state. `GET /health`, `/docs` and `POST /risk/evaluate` stay public, a deliberate scope decision for a portfolio, and safe because the engine never moves money and its decision is advisory (an unreachable or wrong-holding engine causes the orchestrator to hold a payment, never to move it).
 
 ## Known limitations
 
-- No OIDC verification on the push endpoint, so a forged event could be submitted to skew behavioural state. In production the push would carry a verified Pub/Sub OIDC token, and the effect is bounded today because state only informs a score and never moves money.
-- No authentication on the evaluate endpoint. In production the orchestrator would authenticate to the engine.
+- No authentication on the evaluate endpoint. In production the orchestrator would authenticate to the engine; today an evaluate request has no financial effect.
 - The watch list behind DESTINATION_REPUTATION is a fixed synthetic set; a production list would be maintained and versioned from an authoritative source.
 - SHORT_HISTORY measures observed history, not authoritative account age, until ABS emits an `account.created` fact.
 - No rate limiting. Would be added via Cloud Armor or middleware.

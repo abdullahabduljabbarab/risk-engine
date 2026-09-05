@@ -3,11 +3,14 @@ import json
 import logging
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app import config
 from app.database import get_db
 from app.logging import setup_logging
 from app.models import RiskDecision
@@ -123,12 +126,37 @@ class PubSubPush(BaseModel):
     subscription: str | None = None
 
 
+_google_request = google_requests.Request()
+
+
+def _verify_push_identity(authorization: str | None) -> None:
+    """Require a Google OIDC token minted for the configured push service
+    account, so only an authenticated Pub/Sub push can feed behavioural state.
+    Skipped when PUBSUB_PUSH_SA is unset (local and tests)."""
+    if not config.PUBSUB_PUSH_SA:
+        return
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing push authentication")
+    token = authorization.split(" ", 1)[1]
+    try:
+        claims = google_id_token.verify_oauth2_token(token, _google_request)
+    except Exception as e:
+        raise HTTPException(status_code=403, detail="invalid push token") from e
+    if not claims.get("email_verified") or claims.get("email") != config.PUBSUB_PUSH_SA:
+        raise HTTPException(status_code=403, detail="unauthorized push identity")
+
+
 @app.post(
     "/events/pubsub",
     tags=["Event Delivery"],
     summary="Pub/Sub push endpoint for behavioural state",
 )
-def pubsub_push(body: PubSubPush, db: Session = Depends(get_db)):
+def pubsub_push(
+    body: PubSubPush,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    _verify_push_identity(authorization)
     data = body.message.get("data")
     if not data:
         raise HTTPException(status_code=400, detail="missing message.data")

@@ -2,7 +2,7 @@
 
 ## Approach
 
-Every requirement the risk engine owns is verified by an automated test, and every behaviour that can be driven deterministically is additionally proven against the live Cloud Run deployment. CI runs the full suite (57 tests) against a PostgreSQL service container on every push, and the suite builds its schema by running the Alembic migrations, so the ORM and the migrations are exercised together rather than only apart (ADR-014). The requirements are the ABS system requirements owned by the engine, defined in [SYSTEM_REQUIREMENTS.md](https://github.com/abdullahabduljabbarab/abs-financial-systems/blob/main/SYSTEM_REQUIREMENTS.md).
+Every requirement the risk engine owns is verified by an automated test, and every behaviour that can be driven deterministically is additionally proven against the live Cloud Run deployment. CI runs the full suite (58 tests) against a PostgreSQL service container on every push, and the suite builds its schema by running the Alembic migrations, so the ORM and the migrations are exercised together rather than only apart (ADR-014). The requirements are the ABS system requirements owned by the engine, defined in [SYSTEM_REQUIREMENTS.md](https://github.com/abdullahabduljabbarab/abs-financial-systems/blob/main/SYSTEM_REQUIREMENTS.md).
 
 ## Requirement-to-Test Mapping
 

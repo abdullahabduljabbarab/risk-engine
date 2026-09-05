@@ -114,3 +114,22 @@ Make the engine deployable: the container, CI/CD, and the infrastructure as code
 
 ### Next
 Wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract, replacing its threshold stub, and prove the full path live: a payment whose risk decision comes from the engine, and a payment held for review when the engine is unreachable.
+
+## Milestone 6
+
+### Goal
+Bring the docs and evidence to the ledger and orchestrator standard, and authenticate the push endpoint.
+
+### Completed
+- The full docs set: the V&V plan mapping every test to its requirement, the engineering report, security notes, the STRIDE threat model, service level objectives backed by a live load test, and the README with a Swagger walkthrough and the live GCP evidence.
+- Authenticated Pub/Sub push. `POST /events/pubsub` changes the behavioural state that decisions read, so it is now protected: the push subscription attaches a Google OIDC token minted for a dedicated push service account, and the endpoint verifies the token and the account it was issued to before applying an event. The read and decision endpoints stay public by scope decision. Terraform declares the push service account, the token-creator grant to the Pub/Sub service agent, and the OIDC token on the subscription.
+- Test count: 57 to 58 (the push endpoint requires authentication when configured).
+
+### Problems / Decisions
+- The one endpoint worth protecting is the consumer, not the reads. It mutates state that influences decisions, so an open endpoint would let a forged event skew behavioural state, which is a different risk from a public `/docs`. Cloud Run IAM is per-service rather than per-path, so the mixed posture (authenticated consumer, public reads) is enforced in the application: the endpoint verifies the OIDC token itself, leaving `/health`, `/docs` and `/risk/evaluate` open.
+
+### Evidence
+- 58/58 tests, including the push endpoint rejecting an unauthenticated delivery when the push identity is configured. Load test: decision p50 63ms, p95 70ms, 0 failures, 13.57 req/s. The full ecosystem loop proven live, with a payment's decision coming from the engine and one correlation id tracing across the orchestrator and the engine.
+
+### Next
+The core loop is complete and documented. Next are the downstream consumers, notification and analytics, then the shared platform infrastructure.

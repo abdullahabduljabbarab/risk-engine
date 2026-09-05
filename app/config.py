@@ -15,4 +15,10 @@ PUBSUB_TOPIC = os.getenv("PUBSUB_TOPIC", "")
 # build behavioural state. Unset means the state consumer is not run.
 PUBSUB_SUBSCRIPTION = os.getenv("PUBSUB_SUBSCRIPTION", "")
 
+# When set, POST /events/pubsub requires a valid Google OIDC token minted for
+# this service account, which an authenticated Pub/Sub push attaches. This stops
+# an anonymous caller from posting forged events to skew behavioural state. Unset
+# locally and in tests, where verification is skipped.
+PUBSUB_PUSH_SA = os.getenv("PUBSUB_PUSH_SA", "")
+
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local")

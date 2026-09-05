@@ -76,5 +76,5 @@ jobs:
           --region europe-west2
           --allow-unauthenticated
           --add-cloudsql-instances ledger-api-507618:europe-west2:ledger-db
-          --set-env-vars ENVIRONMENT=production,PUBSUB_TOPIC=projects/ledger-api-507618/topics/risk-events
+          --set-env-vars ENVIRONMENT=production,PUBSUB_TOPIC=projects/ledger-api-507618/topics/risk-events,PUBSUB_PUSH_SA=risk-pubsub-push@ledger-api-507618.iam.gserviceaccount.com
           --set-secrets DATABASE_URL=risk-database-url:latest
