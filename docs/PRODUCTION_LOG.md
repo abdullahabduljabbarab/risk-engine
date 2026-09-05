@@ -109,7 +109,8 @@ Make the engine deployable: the container, CI/CD, and the infrastructure as code
 - The service is public and the push endpoint unauthenticated, matching the orchestrator's posture for a portfolio. A production system would require an OIDC token on the push and authenticate the evaluate caller; this is a noted hardening, not a built one.
 
 ### Evidence
-- `terraform fmt` clean and the provider resolves; the lock file carries the cross-platform hashes CI needs; 57/57 tests green against the migrated schema. Infrastructure bootstrapped live and ready for the first deploy.
+- `terraform fmt` clean, the provider resolves, the lock carries the cross-platform hashes CI needs, and 57/57 tests pass against the migrated schema.
+- Deployed live and proven: the keyless CI deploy rolled out to Cloud Run with no stored key; `GET /health` returns 200 with the database connected; a live `POST /risk/evaluate` for a high-value payment to a new destination returned `review` at score 63 with the reasons and the config hash; the async state path works end to end (before consuming any event the account fired `NEW_DESTINATION`, and after the live consumer processed a `payment.received` for it, `NEW_DESTINATION` was gone); and a batch of real orchestrator payment events was delivered by the Pub/Sub push subscription to `/events/pubsub`, every delivery returning 200.
 
 ### Next
-The live bootstrap and first deploy (the database and user, secrets, Artifact Registry, topics, and the push subscription once the service URL exists), then prove a live decision. Then wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract.
+Wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract, replacing its threshold stub, and prove the full path live: a payment whose risk decision comes from the engine, and a payment held for review when the engine is unreachable.
