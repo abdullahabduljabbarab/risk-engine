@@ -67,3 +67,25 @@ The evaluate service and the synchronous decision API.
 
 ### Next
 Events and the consumer: the outbox relay to Pub/Sub, and the `POST /events/pubsub` push endpoint that records observations and maintains account state. Then deploy (Dockerfile, CI, Terraform, Cloud Run) and integrate the orchestrator.
+
+## Milestone 4
+
+### Goal
+Events and the consumer: the outbox relay to Pub/Sub, and the Pub/Sub push endpoint that records observations and maintains behavioural state.
+
+### Completed
+- Two transports (Pub/Sub, log) selected by `PUBSUB_TOPIC`, and the relay wrapping each outbox row in the full ABS envelope, publishing oldest first and stopping at the first failure so ordering holds and a failed row and everything after it stay pending.
+- The Pub/Sub push consumer at `POST /events/pubsub`: it decodes the pushed message, validates the envelope, and records the observation and updates `account_state` in one transaction, deduplicated on `event_id` so redelivery is safe.
+- Behavioural state maintenance: `payment.received` builds velocity, seen destinations, beneficiary changes and the amount average; `payment.failed` and `payment.rejected` build the failures signal; every event is recorded as an observation so state is rebuildable.
+- Endpoints: `POST /events/pubsub`, `GET /outbox/pending`, `POST /outbox/publish`.
+- Test count: 47 to 57.
+
+### Problems / Decisions
+- A push subscription, not a pull loop: the consumer is an HTTP endpoint, which fits Cloud Run's request-driven lifecycle and gives dedup and retry a natural home at the request boundary. A non-2xx makes Pub/Sub retry.
+- The observation and the state update commit together, so state exists if and only if the observation was recorded, and a redelivered event is caught by the observation primary key before it can double-count.
+
+### Evidence
+- 57/57 tests: the envelope carries the full ABS contract with producer `risk-engine`; publish marks rows published and a failed publish leaves everything pending; a payment event builds state and a duplicate is a no-op; a failure event records a failure; and, end to end, five consumed payments build a velocity spike that a later evaluate fires. The push endpoint decodes, dedups, and rejects a malformed message.
+
+### Next
+Deploy: Dockerfile, start.sh, CI (lint, migrate, test against the migrated schema), and Terraform (the database and user on the shared instance, Artifact Registry, secrets, the risk topic and its push subscription, Cloud Run). Then wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract.

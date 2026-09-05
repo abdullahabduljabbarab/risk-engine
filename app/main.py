@@ -1,14 +1,19 @@
+import base64
 import json
 import logging
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.logging import setup_logging
 from app.models import RiskDecision
+from app.observations import apply_observation
+from app.publisher import get_transport
+from app.relay import pending_events, publish_pending
 from app.schemas import EvaluateRequest, EvaluateResponse
 from app.service import EvaluationConflict, evaluate_payment
 
@@ -43,6 +48,10 @@ is never blocked on the freshness of the feed, only informed by it.
 TAGS = [
     {"name": "System", "description": "Health and service status."},
     {"name": "Decisioning", "description": "Evaluate a payment and retrieve a decision."},
+    {
+        "name": "Event Delivery",
+        "description": "Pub/Sub push consumer for behavioural state, and the outbox relay.",
+    },
 ]
 
 app = FastAPI(
@@ -107,3 +116,62 @@ def get_decision(evaluation_id: UUID, db: Session = Depends(get_db)):
     if decision is None:
         raise HTTPException(status_code=404, detail="Decision not found")
     return _to_response(decision)
+
+
+class PubSubPush(BaseModel):
+    message: dict
+    subscription: str | None = None
+
+
+@app.post(
+    "/events/pubsub",
+    tags=["Event Delivery"],
+    summary="Pub/Sub push endpoint for behavioural state",
+)
+def pubsub_push(body: PubSubPush, db: Session = Depends(get_db)):
+    data = body.message.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="missing message.data")
+    try:
+        envelope = json.loads(base64.b64decode(data).decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid message data")
+    if not all(k in envelope for k in ("event_id", "event_type", "occurred_at")):
+        raise HTTPException(status_code=400, detail="invalid envelope")
+    status = apply_observation(db, envelope)
+    return {"status": status}
+
+
+@app.get(
+    "/outbox/pending",
+    tags=["Event Delivery"],
+    summary="List unpublished events",
+)
+def outbox_pending(
+    limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)
+):
+    rows = pending_events(db, limit)
+    return {
+        "pending_count": len(rows),
+        "events": [
+            {
+                "event_id": str(r.id),
+                "event_type": r.event_type,
+                "aggregate_id": str(r.aggregate_id),
+                "correlation_id": str(r.correlation_id),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.post(
+    "/outbox/publish",
+    tags=["Event Delivery"],
+    summary="Relay pending events to the broker",
+)
+def outbox_publish(
+    limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)
+):
+    return publish_pending(db, get_transport(), limit)
