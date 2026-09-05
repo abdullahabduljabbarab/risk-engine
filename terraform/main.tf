@@ -188,3 +188,53 @@ resource "google_pubsub_subscription_iam_member" "dead_letter_subscribe" {
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
+
+# Keyless CI deploy: GitHub Actions authenticates via Workload Identity
+# Federation and impersonates a dedicated least-privilege deploy service
+# account, so no service-account key is stored in the repository. The risk
+# engine is the first ABS service on this model; the pool and provider are
+# shared and will move to platform-infrastructure when it is consolidated.
+resource "google_service_account" "deploy" {
+  account_id   = "risk-engine-deploy"
+  display_name = "Risk Engine Deploy"
+}
+
+resource "google_project_iam_member" "deploy_roles" {
+  for_each = toset([
+    "roles/run.admin",
+    "roles/artifactregistry.writer",
+    "roles/iam.serviceAccountUser",
+  ])
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github-actions"
+  display_name              = "GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  display_name                       = "GitHub"
+
+  attribute_mapping = {
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+  }
+  attribute_condition = "assertion.repository_owner == '${var.github_owner}'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Only the risk-engine repository may impersonate the deploy service account.
+resource "google_service_account_iam_member" "deploy_wif" {
+  service_account_id = google_service_account.deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
+}
