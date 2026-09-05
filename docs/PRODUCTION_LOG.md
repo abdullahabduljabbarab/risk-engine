@@ -45,3 +45,25 @@ Persistence: the append-only decision log, the observations and the derived acco
 
 ### Next
 The evaluate service and API: build the feature snapshot from account_state, score it, persist the decision idempotently on `evaluation_id`, and emit the risk event through the outbox. Then the Pub/Sub push consumer that records observations and maintains the state.
+
+## Milestone 3
+
+### Goal
+The evaluate service and the synchronous decision API.
+
+### Completed
+- The feature builder: turns persisted account state into the derived, windowed feature snapshot the engine scores (velocity, failures, beneficiary churn, structuring, observed age, destination novelty and reputation), and captures the snapshot for replay.
+- The evaluate service: idempotent on `evaluation_id` (a retry returns the original decision and emits nothing new; a reused id with a different body is a conflict), persisting the decision and its `risk.evaluated` outbox event in one transaction, and flooring a decision at review when the event feed is stale.
+- The destination watch list behind DESTINATION_REPUTATION, its version folded into the config hash.
+- The API: `POST /risk/evaluate`, `GET /decisions/{evaluation_id}`, `GET /health`, with OpenAPI metadata to the same standard as the other services, and structured JSON logging.
+- Test count: 32 to 47.
+
+### Problems / Decisions
+- State freshness is a property of the feed, not of an account. The stale signal is measured from the most recent observation across the whole feed, so a quiet account is not mistaken for a stopped consumer. This closes the gap the freshness policy exists for: independent of the feed, but not blind to it.
+- The evaluate service is the only place that reads the clock and the stored state; it snapshots the derived features and hands a pure snapshot to the engine, so the decision stays replayable and the engine stays a pure function.
+
+### Evidence
+- 47/47 tests: a new account's small payment allows, high value reviews, an established clean payment allows, evaluation is idempotent and emits exactly one event, a reused id with a different body is a 409, a stale feed holds an otherwise clean payment, and every decision records its snapshot and config hash. API tests cover evaluate, retrieve, idempotency, conflict, validation and not-found, all against the migrated schema.
+
+### Next
+Events and the consumer: the outbox relay to Pub/Sub, and the `POST /events/pubsub` push endpoint that records observations and maintains account state. Then deploy (Dockerfile, CI, Terraform, Cloud Run) and integrate the orchestrator.

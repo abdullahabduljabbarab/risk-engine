@@ -64,6 +64,14 @@ class RiskConfig:
     max_state_age_seconds: float = 3_600.0  # state older than this is not trusted
     review_at: int = 40
     block_at: int = 70
+    # Windows the feature builder counts over, and the structuring amount band.
+    # They shape what a signal means, so they are part of the hashed config.
+    velocity_window_seconds: float = 600.0
+    failures_window_seconds: float = 3_600.0
+    churn_window_seconds: float = 86_400.0
+    structuring_window_seconds: float = 86_400.0
+    structuring_low: Decimal = Decimal("9000")
+    structuring_high: Decimal = Decimal("10000")
 
 
 @dataclass(frozen=True)
@@ -177,6 +185,12 @@ def config_hash(cfg: RiskConfig) -> str:
             "max_state_age_seconds": cfg.max_state_age_seconds,
             "review_at": cfg.review_at,
             "block_at": cfg.block_at,
+            "velocity_window_seconds": cfg.velocity_window_seconds,
+            "failures_window_seconds": cfg.failures_window_seconds,
+            "churn_window_seconds": cfg.churn_window_seconds,
+            "structuring_window_seconds": cfg.structuring_window_seconds,
+            "structuring_low": str(cfg.structuring_low),
+            "structuring_high": str(cfg.structuring_high),
         },
         sort_keys=True,
     )
