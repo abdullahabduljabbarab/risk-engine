@@ -24,3 +24,24 @@ Freeze the design and build the deterministic decisioning core: the rules engine
 
 ### Next
 Persistence: the append-only decision log (keyed for evaluation idempotency), the risk_observations evidence, the derived account_state, and Alembic migrations, with CI running the suite against the migrated schema. Then the evaluate service and API, and the Pub/Sub push consumer.
+
+## Milestone 2
+
+### Goal
+Persistence: the append-only decision log, the observations and the derived account state, and migrations, with the test suite running against the migrated schema.
+
+### Completed
+- Data model: `risk_decisions` (unique `evaluation_id` for idempotency), `risk_observations` (`event_id` primary key for dedup, `occurred_at` for ordering by business time), `account_state` (derived cache with rolling windows for velocity, failures, destinations and amount average), and `outbox_events`.
+- Alembic migration 001 creating all four tables, verified to upgrade and downgrade via the bare `alembic` console script.
+- Database session and docker-compose (PostgreSQL on 5434).
+- Test count: 27 to 32.
+
+### Problems / Decisions
+- The `decision` column is a plain string, not a Postgres enum. The orchestrator's one live failure was an enum name/value mismatch; a string carries the same three values with none of that risk.
+- The test harness builds the schema by running `alembic upgrade head`, not `metadata.create_all`, so every model test is also a test that the ORM and the migration agree (ADR-014). This is the guard the orchestrator lacked, where the metadata-created and migration-created schemas were each self-consistent but disagreed with each other, and only production exercised the two together.
+
+### Evidence
+- 32/32 tests against the Alembic-migrated schema: decisions round-trip, a duplicate `evaluation_id` is rejected, a duplicate observation `event_id` is rejected at the database from a separate session, `account_state` defaults apply, and an outbox row starts unpublished. Migration 001 upgrades and downgrades cleanly via the bare `alembic` console script.
+
+### Next
+The evaluate service and API: build the feature snapshot from account_state, score it, persist the decision idempotently on `evaluation_id`, and emit the risk event through the outbox. Then the Pub/Sub push consumer that records observations and maintains the state.
