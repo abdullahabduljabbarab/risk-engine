@@ -89,3 +89,24 @@ Events and the consumer: the outbox relay to Pub/Sub, and the Pub/Sub push endpo
 
 ### Next
 Deploy: Dockerfile, start.sh, CI (lint, migrate, test against the migrated schema), and Terraform (the database and user on the shared instance, Artifact Registry, secrets, the risk topic and its push subscription, Cloud Run). Then wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract.
+
+## Milestone 5
+
+### Goal
+Make the engine deployable: the container, CI/CD, and the infrastructure as code.
+
+### Completed
+- Dockerfile and `start.sh` (migrate then serve), and a `.dockerignore`.
+- CI: lint, then a migration applied to a clean database and the full suite run against the migrated schema on a PostgreSQL service container, then a deploy job to Cloud Run.
+- Terraform for the engine's slice of the project: its database and user on the shared Cloud SQL instance, Artifact Registry, the database-url secret injected at runtime, a dedicated runner service account, the `risk-events` topic and its publisher grant, the Cloud Run service, and a push subscription on the orchestrator's `payment-events` topic delivering to the consumer endpoint, with a dead-letter topic and the Pub/Sub service-agent grants that dead-lettering needs. A `terraform` CI workflow (fmt, init, validate) matching the other services.
+
+### Problems / Decisions
+- The behavioural-state feed is a push subscription on the orchestrator's `payment-events` topic, not the engine's own topic: the engine consumes payment facts and publishes risk facts, so it subscribes to the orchestrator and publishes to `risk-events` for downstream services.
+- A dead-letter topic bounds a poison message to five delivery attempts, so the unauthenticated push endpoint cannot be made to loop forever on a message it can never process.
+- The service is public and the push endpoint unauthenticated, matching the orchestrator's posture for a portfolio. A production system would require an OIDC token on the push and authenticate the evaluate caller; this is a noted hardening, not a built one.
+
+### Evidence
+- `terraform fmt` clean and the provider resolves; the lock file carries the cross-platform hashes CI needs; 57/57 tests green against the migrated schema.
+
+### Next
+The live bootstrap and first deploy (the database and user, secrets, Artifact Registry, topics, and the push subscription once the service URL exists), then prove a live decision. Then wire the orchestrator to call `POST /risk/evaluate` with the fail-to-review contract.
