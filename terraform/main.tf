@@ -59,15 +59,24 @@ resource "google_secret_manager_secret_version" "risk_database_url" {
   secret_data = "postgresql://${google_sql_user.risk.name}:${var.risk_db_password}@/${google_sql_database.risk.name}?host=/cloudsql/${data.google_sql_database_instance.ledger_db.connection_name}"
 }
 
+# Dedicated least-privilege runtime identity: the service runs as this account,
+# not the default compute service account. It holds only Cloud SQL Client, read
+# access to its own database-url secret, and publish on its own risk-events topic.
 resource "google_service_account" "cloud_run" {
-  account_id   = "risk-engine-runner"
-  display_name = "Risk Engine Cloud Run"
+  account_id   = "risk-engine-runtime"
+  display_name = "Risk Engine Runtime"
 }
 
 resource "google_secret_manager_secret_iam_member" "cloud_run_database_url" {
   secret_id = google_secret_manager_secret.risk_database_url.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloud_run.email}"
+}
+
+resource "google_project_iam_member" "cloud_run_cloudsql" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.cloud_run.email}"
 }
 
 # risk-events is a shared topic owned by platform-infrastructure; the risk engine
