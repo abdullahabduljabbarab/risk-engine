@@ -10,7 +10,7 @@ output "artifact_registry" {
 
 output "risk_topic" {
   description = "Topic the engine publishes risk decisions to"
-  value       = google_pubsub_topic.risk_events.id
+  value       = data.google_pubsub_topic.risk_events.id
 }
 
 output "payment_events_subscription" {

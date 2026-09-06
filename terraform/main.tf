@@ -70,13 +70,15 @@ resource "google_secret_manager_secret_iam_member" "cloud_run_database_url" {
   member    = "serviceAccount:${google_service_account.cloud_run.email}"
 }
 
-# The risk engine's own topic: risk.evaluated, for downstream services.
-resource "google_pubsub_topic" "risk_events" {
+# risk-events is a shared topic owned by platform-infrastructure; the risk engine
+# publishes risk.evaluated onto it for downstream services. Referenced here, not
+# created here.
+data "google_pubsub_topic" "risk_events" {
   name = "risk-events"
 }
 
 resource "google_pubsub_topic_iam_member" "cloud_run_publish" {
-  topic  = google_pubsub_topic.risk_events.id
+  topic  = data.google_pubsub_topic.risk_events.id
   role   = "roles/pubsub.publisher"
   member = "serviceAccount:${google_service_account.cloud_run.email}"
 }
@@ -112,7 +114,7 @@ resource "google_cloud_run_v2_service" "risk_engine" {
 
       env {
         name  = "PUBSUB_TOPIC"
-        value = google_pubsub_topic.risk_events.id
+        value = data.google_pubsub_topic.risk_events.id
       }
 
       env {
